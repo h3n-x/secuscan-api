@@ -1,0 +1,24 @@
+# Override de producción. Uso: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Diferencias respecto al docker-compose.yml de desarrollo:
+# - Sin bind mount de ./app: el código va horneado en la imagen (build inmutable), no en vivo.
+# - Sin --reload: uvicorn no necesita vigilar cambios de archivo en producción.
+# - --workers 1 explícito: el rate limiter (app/core/rate_limit.py) vive en memoria del
+#   proceso. Más de 1 worker en esta misma máquina ya reproduce la condición que dijimos que
+#   ameritaba migrar a Redis (Paso 7) — si algún día se necesitan más workers, ese es el
+#   momento de revisar esa migración, no antes.
+# - api y db bindeados a 127.0.0.1, no a 0.0.0.0: solo alcanzables desde el propio Droplet
+#   (Nginx en el host incluido). Internet no debe poder pegarle directo a 8000 ni a 5432 —
+#   ver también el Cloud Firewall de DigitalOcean (capa aparte, no reemplaza esto).
+services:
+  api:
+    # !override: por defecto Compose UNE las listas de 'ports'/'volumes' entre archivos, no
+    # las reemplaza — sin este tag, el 0.0.0.0:8000 del dev docker-compose.yml habría seguido
+    # expuesto en paralelo al 127.0.0.1:8000 de acá. Verificado con "docker-compose config".
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    volumes: !override []
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"
+
+  db:
+    ports: !override []

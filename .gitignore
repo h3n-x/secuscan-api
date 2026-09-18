@@ -1,0 +1,39 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Bytecode / cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Distribución / empaquetado
+build/
+dist/
+*.egg-info/
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Docker
+docker-compose.override.yml
+
+# Bases de datos locales
+*.sqlite3
+*.db
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

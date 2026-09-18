@@ -1,0 +1,49 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    # DATABASE_URL se computa acá a partir de POSTGRES_USER/PASSWORD/DB (mismas variables que
+    # usa el servicio 'db' abajo) — una sola fuente de verdad, no dos valores que puedan
+    # desincronizarse si alguien cambia uno y se olvida del otro.
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+    # Corre las migraciones pendientes antes de arrancar uvicorn en cada boot. Es seguro/
+    # idempotente (si ya está en head, "alembic upgrade head" no hace nada) para una sola
+    # instancia como esta — bajo múltiples réplicas arrancando a la vez habría que sacar esto
+    # de acá y correrlo como un paso de deploy aparte, antes de escalar réplicas.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Sin esto, "depends_on: - db" solo espera a que el CONTENEDOR arranque, no a que
+    # Postgres esté listo para aceptar conexiones — con un volumen nuevo (initdb desde cero,
+    # más lento que en un volumen ya inicializado) alembic puede intentar conectarse antes de
+    # tiempo y el contenedor api muere. $$ (no $) para que la variable la resuelva el shell
+    # DENTRO del contenedor (sus propios env vars ya seteados arriba), no Compose al parsear.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  postgres_data:
